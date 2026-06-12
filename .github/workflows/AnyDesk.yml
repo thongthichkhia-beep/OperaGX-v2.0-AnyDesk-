@@ -1,4 +1,4 @@
-name: Cloud PC + AnyDesk + Opera GX (1080p File Extraction)
+name: Cloud PC + AnyDesk + Opera GX (1080p Direct ID Capture)
 
 on:
   workflow_dispatch:
@@ -66,7 +66,7 @@ jobs:
           Write-Host "Starting AnyDesk application in backend context..."
           $targetPath = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
           Start-Process -FilePath $targetPath -ErrorAction SilentlyContinue
-          Start-Sleep -Seconds 8
+          Start-Sleep -Seconds 10
 
       - name: Minimize Running Infrastructure Windows
         run: |
@@ -101,22 +101,19 @@ jobs:
 
       - name: Fetch and Display AnyDesk Connection Credentials
         run: |
-          Write-Host "Scanning system infrastructure configuration files for unique access keys..."
+          Write-Host "Querying process memory and standard output streams for ID assignment..."
+          $targetPath = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
           $deviceId = "Not Found"
           
-          # Target configuration path mapping for system context executions
-          $configPath = "C:\ProgramData\AnyDesk\system.conf"
-          
+          # Poll the active binary, forcing stream redirection via Out-String to catch console output
           for ($i = 1; $i -le 15; $i++) {
-              if (Test-Path $configPath) {
-                  $content = Get-Content $configPath -Raw
-                  # Regex matches 'ad.id=' configuration lines perfectly
-                  if ($content -match 'ad\.id=(\d+)') {
-                      $deviceId = $Matches[1]
-                      break
-                  }
+              $idOutput = & $targetPath --get-id 2>&1 | Out-String
+              if ($idOutput -match '(\d{9,10})' -or $idOutput -trim -match '^\d+$') {
+                  $deviceId = $Matches[1].Trim()
+                  if (-not $deviceId) { $deviceId = $idOutput.Trim() }
+                  break
               }
-              Start-Sleep -Seconds 2
+              Start-Sleep -Seconds 3
           }
           
           $ESC = [char]27
