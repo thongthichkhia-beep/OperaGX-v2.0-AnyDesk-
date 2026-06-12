@@ -1,4 +1,4 @@
-name: Cloud PC + AnyDesk + Opera GX (Forced Minimize Fix)
+name: OperaGX PC
 
 on:
   workflow_dispatch:
