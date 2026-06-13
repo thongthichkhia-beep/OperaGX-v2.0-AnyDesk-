@@ -28,27 +28,31 @@ jobs:
       - name: Force Full HD Resolution
         run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
 
-      - name: Install and Configure TightVNC Server (Silent Registry Injection)
+      - name: Purge Legacy Key Configs and Install TightVNC Server
         run: |
+          # Completely purge older registry pathways to prevent background validation blocks
+          Remove-Item -Path "HKLM:\SOFTWARE\TightVNC" -Recurse -ErrorAction SilentlyContinue
+          
           Invoke-WebRequest -Uri "https://www.tightvnc.com/download/2.8.84/tightvnc-2.8.84-gpl-setup-64bit.msi" -OutFile "$env:TEMP\tightvnc.msi"
           Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP\tightvnc.msi`" /quiet /qn SERVER_REGISTER_AS_SERVICE=1" -Wait
           
-          # Allow the system a short buffer period to complete initialization tasks
-          Start-Sleep -Seconds 10
+          Start-Sleep -Seconds 8
           
-          # Inject configurations explicitly via standard native command shell tools to ensure true compatibility
+          # Force stop the automatic service initialization state to write modifications cleanly
+          Stop-Service -Name "tvnserver" -ErrorAction SilentlyContinue
+          
+          # Initialize fresh base network registry variables
           reg add "HKLM\SOFTWARE\TightVNC\Server" /v AuthRequired /t REG_DWORD /d 1 /f
           reg add "HKLM\SOFTWARE\TightVNC\Server" /v AuthType /t REG_DWORD /d 1 /f
           reg add "HKLM\SOFTWARE\TightVNC\Server" /v AllowLoopback /t REG_DWORD /d 1 /f
           reg add "HKLM\SOFTWARE\TightVNC\Server" /v AcceptLocalConnections /t REG_DWORD /d 1 /f
           
-          # Standard hex representation structure for target validation
+          # Inject correct binary string values directly for the Pass1234 credential validation loop
           reg add "HKLM\SOFTWARE\TightVNC\Server" /v Password /t REG_BINARY /d 2147667a55aa6b39 /f
           reg add "HKLM\SOFTWARE\TightVNC\Server" /v ControlPassword /t REG_BINARY /d 2147667a55aa6b39 /f
           
           Start-Sleep -Seconds 2
-          # Restart the service to force the environment to pick up the updated settings
-          Restart-Service -Name "tvnserver" -Force
+          Start-Service -Name "tvnserver"
 
       - name: Download & Force Consumer Build of Opera GX
         run: |
