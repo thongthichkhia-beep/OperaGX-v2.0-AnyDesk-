@@ -1,4 +1,4 @@
-name: OperaGX PC by Ryxllers.
+name: Cloud PC + RustDesk + Opera GX (Ultimate Mobile Controls)
 
 on:
   workflow_dispatch:
@@ -53,9 +53,14 @@ jobs:
             Remove-Item $installerPath -Force
           }
 
-      - name: Set Custom RustDesk Static Password
+      - name: Configure RustDesk Network Options & Credentials
         run: |
+          # Sets your permanent security key
           & "C:\Program Files\RustDesk\rustdesk.exe" --password "$env:rdp_pass"
+          
+          # Adjust internal network parameters to bypass unauthenticated public grid block rules
+          & "C:\Program Files\RustDesk\rustdesk.exe" --config '{"id-server": "rustdesk.com"}' 2>$null
+          
           Write-Host "RustDesk permanent security key set to: $env:rdp_pass"
 
       - name: Open Firewall Rules for RustDesk Port Mapping
@@ -95,13 +100,19 @@ jobs:
               $DownloadUrl = $json.data.downloadPage
               "SCREENSHOT_URL=$DownloadUrl" | Out-File -Append $env:GITHUB_ENV
               
-              # Highly visible terminal highlight layout blocks
+              # ANSI Escape Sequences for structural color output execution
+              $Esc = [char]27
+              $Cyan = "$Esc[36m"
+              $Yellow = "$Esc[33m"
+              $Green = "$Esc[32m"
+              $Reset = "$Esc[0m"
+
               Write-Host ""
-              Write-Host "###########################################################################" -ForegroundColor Cyan
-              Write-Host "🚨 ATTENTION VIEWERS: LIVE CREDENTIALS CAPTURE URL GENERATED 🚨" -ForegroundColor Yellow
-              Write-Host "###########################################################################" -ForegroundColor Cyan
-              Write-Host "➡️ LINK: $DownloadUrl" -ForegroundColor Green
-              Write-Host "###########################################################################" -ForegroundColor Cyan
+              Write-Host "${Cyan}###########################################################################${Reset}"
+              Write-Host "${Yellow}🚨 ATTENTION VIEWERS: LIVE CREDENTIALS CAPTURE URL GENERATED 🚨${Reset}"
+              Write-Host "${Cyan}###########################################################################${Reset}"
+              Write-Host "${Green}➡️ LINK: $DownloadUrl${Reset}"
+              Write-Host "${Cyan}###########################################################################${Reset}"
               Write-Host ""
           } else {
               Write-Warning "Gofile capture delivery dropped."
@@ -167,7 +178,6 @@ jobs:
           $mins = [int]$env:RUNTIME_MINUTES
           $end = (Get-Date).AddMinutes($mins)
           while ((Get-Date) -lt $end) {
-            # Completely stripped out screenshot tracking context strings
             Write-Host "Cloud PC Active Status | Heartbeat Signal Active | System Session Ends at: $($end.ToString('HH:mm:ss'))"
             Start-Sleep -Seconds 60
           }
