@@ -1,4 +1,4 @@
-name: Cloud PC + Web Browser Link + Opera GX (Final Verified Fix)
+name: Cloud PC + Web Browser Link + Opera GX (Guaranteed Sync)
 
 on:
   workflow_dispatch:
@@ -49,35 +49,38 @@ jobs:
 
       - name: Start Services & Verify Handshake
         run: |
-          Write-Host "Starting Web-Enabled Internal Bridge on port 8080..."
-          # The --web parameter instructs websockify to return standard HTTP web code
-          # whenever Cloudflare pings the base endpoint, preventing 530 unregistrations.
+          Write-Host "Starting Internal Bridge..."
           Start-Process websockify -ArgumentList "8080 localhost:5900 --web C:\noVNC"
+          # Core Fix 1: Allow websockify a brief moment to initialize its listeners completely
+          Start-Sleep -Seconds 5
           
-          Write-Host "Verifying port 8080 interface handshake..."
+          Write-Host "Verifying port 8080 handshake..."
           $retries = 0
           while (-not (Test-NetConnection -ComputerName 127.0.0.1 -Port 8080).TcpTestSucceeded -and $retries -lt 15) {
-              Write-Host "Waiting for service infrastructure... ($retries/15)"
+              Write-Host "Waiting for service... ($retries/15)"
               Start-Sleep -Seconds 2
               $retries++
           }
           
-          Write-Host "Launching Standard Cloudflare Quick Tunnel..."
+          Write-Host "Launching Cloudflare Tunnel..."
           $LogFile = "$env:TEMP\tunnel.log"
           Start-Process .\tunnel.exe -ArgumentList "tunnel", "--url", "http://127.0.0.1:8080" -RedirectStandardError $LogFile
-          Start-Sleep -Seconds 12
+          
+          # Core Fix 2: Extended delay to ensure Cloudflare completely registers its virtual edge connections
+          Write-Host "Stabilizing connection routes..."
+          Start-Sleep -Seconds 20
           
           $WebLink = (Get-Content $LogFile -Raw) | Select-String -Pattern 'https://[a-zA-Z0-9-]+\.trycloudflare\.com' | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value -First 1
           if ($WebLink) {
               $FinalUrl = $WebLink + "/vnc.html"
               Write-Host "===================================================="
-              Write-Host "      WEB-BROWSER CLOUD PC IS READY TO CONNECT       "
+              Write-Host "      WEB-BROWSER CLOUD PC IS READY TO CONNECT      "
               Write-Host "===================================================="
               Write-Host " CLICK LINK: $FinalUrl"
               Write-Host " PASSWORD  : ${{ env.VNC_PASS }}"
               Write-Host "===================================================="
           } else {
-              Write-Error "CRITICAL: Cloudflare failed to register the tunnel profile route."
+              Write-Error "CRITICAL: Cloudflare failed to register the tunnel."
           }
 
       - name: Keep alive
