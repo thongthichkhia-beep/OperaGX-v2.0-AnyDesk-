@@ -8,7 +8,6 @@ on:
       ts_api_key:         { description: "Tailscale API key", required: true }
       runtime_minutes:    { description: "Runtime (max 360)", required: false, default: "355" }
 
-# This block automatically terminates previous active runs of this exact workflow when a new one starts
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -140,14 +139,15 @@ jobs:
 
       - name: Connection Keep-Alive Loop
         run: |
-          $mins = [int]"${{ env.RUNTIME_MINUTES }}"
+          $mins = [int]$env:RUNTIME_MINUTES
+          if (-not $mins) { $mins = 355 }
+          
           $end = (Get-Date).AddMinutes($mins)
           while ((Get-Date) -lt $end) {
             Write-Host ("Tailscale/RDP Active Engine | Heartbeat " + (Get-Date).ToString("HH:mm:ss") + " ends at " + $end.ToString("HH:mm:ss"))
             Start-Sleep -Seconds 60
           }
 
-      # This runs no matter how the workflow stops (cancelled, timed out, completed) to clean up Tailscale
       - name: Disconnect Tailscale Node Safely
         if: always()
         run: |
