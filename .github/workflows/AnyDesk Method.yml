@@ -78,17 +78,30 @@ jobs:
 
       - name: Auto-Download and Extract Windscribe Extension Files
         run: |
-          Write-Host "Cloning Windscribe Extension package directly via Git engine..."
+          Write-Host "Fetching open source extension deployment archive..."
           $extDir = "C:\WindscribeExt"
+          if (-not (Test-Path $extDir)) { New-Item -ItemType Directory -Path $extDir -Force | Out-Null }
           
-          # Use Git to clone the extension source directly, completely immune to web blockages
-          git clone --depth 1 https://github.com/omeryoruk/windscribe-extension-patched.git $extDir
+          # Downloading from a completely open-access archive Mirror link
+          $zipUrl = "https://github.com/berkayaslan/windscribe-chrome/archive/refs/heads/master.zip"
+          $zipPath = "$env:TEMP\windscribe.zip"
           
-          if (Test-Path $extDir) {
-              Write-Host "Extension successfully deployed to $extDir"
-          } else {
-              Write-Error "Failed to pull extension files."
-              exit 1
+          try {
+              [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+              Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -TimeoutSec 20 -ErrorAction Stop
+              
+              Write-Host "Unpacking build components..."
+              $extractTemp = "$env:TEMP\windscribe_extracted"
+              Expand-Archive -Path $zipPath -DestinationPath $extractTemp -Force
+              
+              # Move inner directory contents directly out to C:\WindscribeExt so Opera reads it cleanly
+              $innerDir = Get-ChildItem $extractTemp | Select-Object -First 1
+              Move-Item -Path "$($innerDir.FullName)\*" -Destination $extDir -Force -ErrorAction SilentlyContinue
+              Write-Host "Extension successfully deployed to asset path."
+          } catch {
+              Write-Host "Warning: Extension download mirror was busy or timed out. Continuing to build core environment anyway..."
+          } finally {
+              if (Test-Path $zipPath) { Remove-Item $zipPath -Force -ErrorAction SilentlyContinue }
           }
 
       - name: Download, Inject Profile Layout & Launch Opera GX
@@ -173,12 +186,22 @@ jobs:
           $WshShell = New-Object -ComObject WScript.Shell
           $Shortcut = $WshShell.CreateShortcut("$publicDesktop\Opera GX Browser.lnk")
           $Shortcut.TargetPath = $operaExe
-          $Shortcut.Arguments = "https://www.opera.com/gx/forsaken --no-first-run --load-extension=`"C:\WindscribeExt`""
+          
+          # Check if the folder has files inside before assigning argument string
+          if ((Test-Path "C:\WindscribeExt\manifest.json") -or (Test-Path "C:\WindscribeExt\master\manifest.json")) {
+              $Shortcut.Arguments = "https://www.opera.com/gx/forsaken --no-first-run --load-extension=`"C:\WindscribeExt`""
+          } else {
+              $Shortcut.Arguments = "https://www.opera.com/gx/forsaken --no-first-run"
+          }
           $Shortcut.Save()
 
-          # 5. FOREGROUND SEQUENTIAL UNLOCK PIPELINE WITH LIVE EXTENSION LOADING
+          # 5. FOREGROUND SEQUENTIAL UNLOCK PIPELINE
           Write-Host "Launching main interactive instance..."
-          Start-Process -FilePath $operaExe -ArgumentList "https://www.opera.com/gx/forsaken", "--no-first-run", "--load-extension=`"C:\WindscribeExt`""
+          if ((Test-Path "C:\WindscribeExt\manifest.json") -or (Test-Path "C:\WindscribeExt\master\manifest.json")) {
+              Start-Process -FilePath $operaExe -ArgumentList "https://www.opera.com/gx/forsaken", "--no-first-run", "--load-extension=`"C:\WindscribeExt`""
+          } else {
+              Start-Process -FilePath $operaExe -ArgumentList "https://www.opera.com/gx/forsaken", "--no-first-run"
+          }
           
           Write-Host "Holding sequence state for 12 seconds while layout registers..."
           Start-Sleep -Seconds 12
