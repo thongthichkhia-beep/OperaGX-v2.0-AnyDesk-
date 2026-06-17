@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 190
     env:
-      ANYDESK_PASS: Pass@1234
+      ANYDESK_PASS: Pass1234
       RUNTIME_MINUTES: 180
 
     steps:
@@ -31,6 +31,12 @@ jobs:
               if (Test-Path "$userDesktop\$target") { Remove-Item "$userDesktop\$target" -Force -ErrorAction SilentlyContinue }
           }
 
+      - name: Dismiss Annoying Windows System Properties Popups
+        run: |
+          Write-Host "Killing background paging file error popups..."
+          Stop-Process -Name "systempropertiesadvanced" -Force -ErrorAction SilentlyContinue
+          Stop-Process -Name "systempropertiescomputername" -Force -ErrorAction SilentlyContinue
+
       - name: Download and Force Install AnyDesk
         run: |
           $url = "https://download.anydesk.com/AnyDesk.exe"
@@ -44,38 +50,55 @@ jobs:
           Start-Sleep -Seconds 5
           Remove-Item $dst -ErrorAction SilentlyContinue
 
-      - name: Configure Unattended Access Password & Force Enable Touch Injection
+      - name: Configure Unattended Access Password
         run: |
           $ad = "C:\Program Files (x86)\AnyDesk\AnyDesk.exe"
           if (-not (Test-Path $ad)) { $ad = "C:\Program Files\AnyDesk\AnyDesk.exe" }
           
+          # Using the standardized robust connection setup to avoid registry crashes
           cmd.exe /c "echo ${{ env.ANYDESK_PASS }} | `"$ad`" --set-password"
-          
-          # Force Windows to allow UI Automation and Touch Injection over RDP layers
-          New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableUIADesktopToggle" -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
-          
-          # Unblock Touch Remote/Tablet Mode restrictions in Remote Desktop Services
-          $tsPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations"
-          New-ItemProperty -Path $tsPath -Name "TouchMode" -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
-          New-ItemProperty -Path $tsPath -Name "EnableTouchInjection" -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
-          
-          $path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-          Set-ItemProperty -Path $path -Name "TaskbarGlomLevel" -Value 0 -ErrorAction SilentlyContinue
-          
           Start-Process -FilePath $ad -ArgumentList "--restart-service" -Wait
           Start-Sleep -Seconds 5
 
       - name: Minimize Running Infrastructure Windows
         run: |
-          Write-Host "Sending active command prompt windows to the taskbar tray..."
-          # Restored your original working shell automation layout
           $shell = New-Object -ComObject Shell.Application
           $shell.MinimizeAll()
 
       - name: Optimize Resolution for Mobile Display
         run: |
-          Write-Host "Forcing resolution calibration matrix..."
+          Write-Host "Forcing 1600x1200 layout..."
           Set-DisplayResolution -Width 1600 -Height 1200 -Force -ErrorAction SilentlyContinue
+
+      - name: Pre-Configure Opera GX Profile (VPN & Sidebar Gift Icon)
+        run: |
+          Write-Host "Injecting custom configuration JSON to unblock features..."
+          $profilePath = "$env:APPDATA\Opera Software\Opera GX Stable"
+          if (-not (Test-Path $profilePath)) { New-Item -ItemType Directory -Path $profilePath -Force | Out-Null }
+          
+          # Custom preferences configuration structured to activate requested flags natively
+          $prefJson = @'
+          {
+            "freedom": {
+              "proxy_switch": {
+                "vpn_enabled_once_by_user": true
+              }
+            },
+            "vpn": {
+              "blacklisted_interfaces": [],
+              "last_established_location": "OPTIMAL",
+              "preferred_location": "OPTIMAL"
+            },
+            "ui": {
+              "sidebar": {
+                "visible": true,
+                "pinned_items": ["gx_rewards", "vpn_sidebar_item"]
+              }
+            }
+          }
+          '@
+          
+          Set-Content -Path "$profilePath\Preferences" -Value $prefJson -Force
 
       - name: Download & Force Consumer Build of Opera GX
         run: |
@@ -93,16 +116,19 @@ jobs:
               Move-Item -Path "$userDesktop\Opera GX.lnk" -Destination $publicDesktop -Force -ErrorAction SilentlyContinue
           }
           
-          Write-Host "Configuring explicit launcher shortcut with forced promo link and sidebar flags..."
+          Write-Host "Configuring explicit launcher shortcut with promo flags..."
           $operaExe = "$env:ProgramFiles\Opera GX\opera.exe"
           if (-not (Test-Path $operaExe)) { $operaExe = "$env:ProgramFiles (x86)\Opera GX\opera.exe" }
           
           $WshShell = New-Object -ComObject WScript.Shell
           $Shortcut = $WshShell.CreateShortcut("$publicDesktop\Opera GX Browser.lnk")
           $Shortcut.TargetPath = $operaExe
-          # Routes directly to your link, suppresses the intro splash, and injects feature flags
-          $Shortcut.Arguments = "https://www.opera.com/gx/forsaken --no-first-run --enable-features=GXRewards,GXRewardsSidebarItem --with-feature:gx-rewards=1"
+          # Combining URL routing parameters alongside feature-level triggers
+          $Shortcut.Arguments = "https://www.opera.com/gx/forsaken --no-first-run --enable-features=GXRewards,GXRewardsSidebarItem --enable-vpn"
           $Shortcut.Save()
+          
+          # Launch browser directly using the newly configured environment adjustments
+          Start-Process -FilePath "$publicDesktop\Opera GX Browser.lnk"
 
       - name: Fetch and Display AnyDesk Connection Address
         run: |
@@ -127,7 +153,7 @@ jobs:
           $Reset = "$ESC[0m"
           
           Write-Host "${Green}====================================================${Reset}"
-          Write-Host "${Green}       ANYDESK CLOUD MACHINE IS READY TO CONNECT     ${Reset}"
+          Write-Host "${Green}        ANYDESK CLOUD MACHINE IS READY TO CONNECT     ${Reset}"
           Write-Host "${Green}====================================================${Reset}"
           Write-Host "${Yellow} CONNECTION ID : ${Red}${cleanId}${Reset}"
           Write-Host "${Yellow} PASSWORD      : ${Red}${{ env.ANYDESK_PASS }}${Reset}"
